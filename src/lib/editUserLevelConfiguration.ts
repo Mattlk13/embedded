@@ -4,7 +4,7 @@ import type { Theme } from "../types/theme";
 import { assertInit } from "../utils/assertInit";
 import { setIframe } from "../utils/iframe";
 
-export type EditInstanceConfigurationProps = {
+export type EditUserLevelConfigurationProps = {
   instanceId: string;
   selector: string;
   theme?: Theme;
@@ -17,35 +17,34 @@ export type EditInstanceConfigurationProps = {
 };
 
 /**
- * Renders the configuration wizard for an existing instance directly into a
- * DOM element (no popover). This is useful when you want to embed instance
- * configuration inline within your own application's UI.
+ * Renders the configuration wizard for a customer user's own connections,
+ * inline within a DOM element you provide.
  *
- * Unlike {@link configureInstance}, this function opens the config wizard directly,
- * supports lifecycle callbacks (`onSuccess`, `onCancel`, `onDelete`), and returns a
- * cleanup function to remove event listeners.
+ * Customer users supply their own connections rather than the instance's, so
+ * this opens their pages and nothing else. Use {@link editInstanceConfiguration}
+ * for the instance's own configuration instead.
  *
- * This opens the instance's own configuration. Customer users supply their own
- * connections instead, so use {@link editUserLevelConfiguration} for them.
+ * The callbacks report what happens to that person's configuration, not to the
+ * instance: `onSuccess` fires when their configuration deploys.
  *
  * @param props - Configuration and display options.
  * @param props.instanceId - The ID of the instance to configure.
  * @param props.selector - A CSS selector for the DOM element to render into.
  * @param props.theme - Optional theme override (`"LIGHT"` or `"DARK"`).
  * @param props.screenConfiguration - Optional screen configuration for the configuration wizard.
- * @param props.onSuccess - Called when the instance is successfully deployed.
- * @param props.onCancel - Called when the user cancels the configuration.
- * @param props.onDelete - Called when the user deletes the instance.
+ * @param props.onSuccess - Called when the person's configuration is successfully deployed.
+ * @param props.onCancel - Called when the person cancels the configuration.
+ * @param props.onDelete - Called when the person removes their configuration.
  * @returns A cleanup function that removes the event listeners, or `undefined` if no callbacks were provided.
  *
  * @example
- * // Edit an instance's configuration with lifecycle callbacks
- * const cleanup = prismatic.editInstanceConfiguration({
+ * // Let a customer user connect their own account
+ * const cleanup = prismatic.editUserLevelConfiguration({
  *   instanceId: "SW5zdGFuY2U6OGE2YjZi...",
  *   selector: "#config-panel",
- *   onSuccess: () => console.log("Configuration saved!"),
+ *   onSuccess: () => console.log("Their account is connected."),
  *   onCancel: () => console.log("Configuration canceled."),
- *   onDelete: () => console.log("Instance deleted."),
+ *   onDelete: () => console.log("Their configuration was removed."),
  * });
  *
  * // Call cleanup() when you're done to remove event listeners
@@ -53,7 +52,7 @@ export type EditInstanceConfigurationProps = {
  *
  * @see {@link https://prismatic.io/docs/embed/marketplace/ | Embedding the Marketplace}
  */
-export const editInstanceConfiguration = ({
+export const editUserLevelConfiguration = ({
   instanceId,
   selector,
   theme,
@@ -61,8 +60,8 @@ export const editInstanceConfiguration = ({
   onCancel,
   onSuccess,
   onDelete,
-}: EditInstanceConfigurationProps) => {
-  assertInit("editInstanceConfiguration");
+}: EditUserLevelConfigurationProps) => {
+  assertInit("editUserLevelConfiguration");
 
   setIframe(
     `/configure-instance/${instanceId}/`,
@@ -77,7 +76,7 @@ export const editInstanceConfiguration = ({
         },
       },
     },
-    { reconfigure: "true" },
+    { reconfigure: "true", userLevelConfigured: "true" },
   );
 
   if (!onCancel && !onSuccess && !onDelete) {
@@ -90,14 +89,16 @@ export const editInstanceConfiguration = ({
     "message",
     (event: MessageEvent<{ event: string }>) => {
       switch (event.data?.event) {
-        case PrismaticMessageEvent.INSTANCE_DEPLOYED:
+        case PrismaticMessageEvent.USER_CONFIGURATION_DEPLOYED:
           onSuccess?.();
           abortController.abort();
           break;
-        case PrismaticMessageEvent.INSTANCE_DELETED:
+        case PrismaticMessageEvent.USER_CONFIGURATION_DELETED:
           onDelete?.();
           abortController.abort();
           break;
+        // There is no user level cancel event; cancelling the wizard reports
+        // itself under the instance level name.
         case PrismaticMessageEvent.INSTANCE_CONFIGURATION_CANCELED:
           onCancel?.();
           abortController.abort();
